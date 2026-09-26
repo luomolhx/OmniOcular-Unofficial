@@ -12,6 +12,6 @@
         "credits": "",
         "parent": "",
         "screenshots": [],
-        "dependencies": []
+        "dependencies": ["Waila", "NotEnoughItems"]
     }
 ]

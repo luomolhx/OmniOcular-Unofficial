@@ -1,5 +1,20 @@
-omniocular.info.NotHolding=NotHolding
-omniocular.info.NotPointing=NotPointing
+omniocular.info.NotPointing=You must be pointing at an entity.
+omniocular.info.DebugOff=OmniOcular debug is off. Enable 'debug' in the config to collect stats.
+omniocular.info.StatsReset=OmniOcular stats reset.
+omniocular.info.UpdateStarted=OmniOcular: updating the configs from the upstream repo…
+omniocular.info.UpdateRunning=An OmniOcular config update is already running.
+omniocular.info.UpdateResult=OmniOcular config update finished: %s
+omniocular.info.UpdateUpToDate=OmniOcular configs are already up to date (upstream: %s files).
+omniocular.info.UpdateFailed=OmniOcular config update failed: %s (local configs are untouched).
+
+# These 3 keys are referenced by the CCYF78/GTNH_OmniOcular corpus.
+# hud.msg.energ is a historical typo for hud.msg.energy (defined below), but both the bundled
+# Forestry.xml / GalacticraftCore.xml and CCYF78's copies use "energ", 30 occurrences in total.
+# releasePreConfigFiles never overwrites an existing user config, so fixing the XML would only
+# help fresh installs - defining the key here fixes it for everyone.
+hud.msg.energ=Energy
+hud.msg.fluid=Fluid
+hud.msg.frequency=Frequency
 
 hud.msg.common.LiquidAmount=Liquid Amount
 hud.msg.common.StorageFluid=Storage Fluid

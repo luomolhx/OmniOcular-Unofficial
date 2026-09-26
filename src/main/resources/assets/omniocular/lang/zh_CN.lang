@@ -1,47 +1,61 @@
-omniocular.info.NotHolding=使用该指令必须手持一件物品.
 omniocular.info.NotPointing=使用该指令必须对准一个实体.
+omniocular.info.DebugOff=OmniOcular 调试未开启. 请在配置文件中打开 debug 后再收集统计.
+omniocular.info.StatsReset=OmniOcular 统计数据已重置.
+omniocular.info.UpdateStarted=OmniOcular: 正在从上游仓库更新配置…
+omniocular.info.UpdateRunning=OmniOcular 配置更新已在进行中.
+omniocular.info.UpdateResult=OmniOcular 配置更新完成: %s
+omniocular.info.UpdateUpToDate=OmniOcular 配置已是最新（上游 %s 个文件）.
+omniocular.info.UpdateFailed=OmniOcular 配置更新失败: %s（本地配置未改动）.
+
+# 以下 3 个键按 CCYF78/GTNH_OmniOcular 语料的实际引用补齐。
+# 注意 hud.msg.energ 是历史拼写错误（本应为下面的 hud.msg.energy），
+# 但内置 Forestry.xml / GalacticraftCore.xml 与 CCYF78 的同名文件都写作 energ，共 30 处。
+# releasePreConfigFiles 不会覆盖用户已有配置，改 XML 只能帮到新安装，故在此补键以修复所有用户。
+hud.msg.energ=能量
+hud.msg.fluid=流体
+hud.msg.frequency=频率
 
 hud.msg.common.LiquidAmount=流体存量
 hud.msg.common.StorageFluid=流体种类
 hud.msg.common.BurnTime=燃烧时间
 
-hud.msg.AWWayofTime.Capacity=Capacity
-hud.msg.AWWayofTime.Process=Process
-hud.msg.AWWayofTime.ProcessSpeed=Process Speed
-hud.msg.AWWayofTime.IOSpeed=IO Speed
-hud.msg.AWWayofTime.OrbCapacity=Orb Capacity
-hud.msg.AWWayofTime.Sacrifice=Sacrifice
-hud.msg.AWWayofTime.SelfSacrifice=Self-Sacrifice
-hud.msg.AWWayofTime.RitualID=Ritual ID
-hud.msg.AWWayofTime.RitualOwner=Ritual Owner
-hud.msg.AWWayofTime.Require=Require
+hud.msg.AWWayofTime.Capacity=容量
+hud.msg.AWWayofTime.Process=进度
+hud.msg.AWWayofTime.ProcessSpeed=处理速度
+hud.msg.AWWayofTime.IOSpeed=输入输出速度
+hud.msg.AWWayofTime.OrbCapacity=宝珠容量
+hud.msg.AWWayofTime.Sacrifice=献祭
+hud.msg.AWWayofTime.SelfSacrifice=自我献祭
+hud.msg.AWWayofTime.RitualID=仪式 ID
+hud.msg.AWWayofTime.RitualOwner=仪式主人
+hud.msg.AWWayofTime.Require=需求
 
-hud.msg.Botania.Mana=Mana
-hud.msg.Botania.output.0=Accepting Mana from Items
-hud.msg.Botania.output.1=Sparing Mana to Items
+hud.msg.Botania.Mana=魔力
+hud.msg.Botania.output.0=从物品汲取魔力
+hud.msg.Botania.output.1=向物品输送魔力
 
 hud.msg.BuildCraftCore.MaxEnergyReceive=最大可接收能源
-hud.msg.BuildCraftCore.Recipe=Recipe
-hud.msg.BuildCraftCore.Pattern=Pattern
+hud.msg.BuildCraftCore.Recipe=配方
+hud.msg.BuildCraftCore.Pattern=模板
 
-hud.msg.EnderIO.Experience=Experience
+hud.msg.EnderIO.Experience=经验
 
-hud.msg.factorization.Count=Count
-hud.msg.factorization.Fan=Fan
-hud.msg.factorization.Charge=Charge
-hud.msg.factorization.Digest=Digest
-hud.msg.factorization.Process=Process
-hud.msg.factorization.Speed=Speed
+hud.msg.factorization.Count=数量
+hud.msg.factorization.Fan=风扇
+hud.msg.factorization.Charge=充能
+hud.msg.factorization.Digest=消化
+hud.msg.factorization.Process=处理
+hud.msg.factorization.Speed=速度
 
-hud.msg.GalacticraftCore.AirStored=Air Stored
-hud.msg.GalacticraftCore.GenerateRate=Generate Rate
-hud.msg.GalacticraftCore.CookTime=Cook Time
-hud.msg.GalacticraftCore.GasAmount=Gas Amount
-hud.msg.GalacticraftCore.LiquidAmount=Liquid Amount
-hud.msg.GalacticraftCore.TimeUntilLaunch=Time Until Launch
+hud.msg.GalacticraftCore.AirStored=氧气储量
+hud.msg.GalacticraftCore.GenerateRate=生成速率
+hud.msg.GalacticraftCore.CookTime=烹饪时间
+hud.msg.GalacticraftCore.GasAmount=气体量
+hud.msg.GalacticraftCore.LiquidAmount=液体量
+hud.msg.GalacticraftCore.TimeUntilLaunch=发射倒计时
 
 hud.msg.vanilla.BurnTime=剩余燃烧时间
-hud.msg.vanilla.Seconds=Seconds
+hud.msg.vanilla.Seconds=秒
 
 hud.msg.witchery.Owner=主人
 
@@ -69,7 +83,7 @@ hud.msg.Mystcraft.position=生成于
 hud.msg.Mystcraft.flags=效果
 hud.msg.Mystcraft.author=拥有者
 
-hud.msg.ReactorCraft.chg=Charge
+hud.msg.ReactorCraft.chg=充能
 
 hud.msg.progress=工作进程
 hud.msg.temperature=温度

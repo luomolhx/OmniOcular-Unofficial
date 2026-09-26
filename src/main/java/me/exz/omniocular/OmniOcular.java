@@ -22,6 +22,17 @@ public class OmniOcular {
     @SidedProxy(clientSide = Reference.CLIENT_PROXY_CLASS, serverSide = Reference.SERVER_PROXY_CLASS)
     private static CommonProxy proxy;
 
+    /**
+     * 供后台线程（配置更新器）回显结果用。
+     *
+     * <p>
+     * 必须走 proxy：客户端才有聊天栏，而 {@code net.minecraft.client.Minecraft} 这类类
+     * 不能出现在公共代码里——服务端的 jar 没有它们，类校验时会直接 NoClassDefFoundError。
+     */
+    public static CommonProxy getProxy() {
+        return proxy;
+    }
+
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         proxy.preInit(event);

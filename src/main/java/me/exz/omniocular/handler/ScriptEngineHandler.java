@@ -1,14 +1,12 @@
 package me.exz.omniocular.handler;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 import javax.script.ScriptEngineFactory;
@@ -18,46 +16,63 @@ import net.minecraft.launchwrapper.Launch;
 import net.minecraft.launchwrapper.LaunchClassLoader;
 
 import cpw.mods.fml.common.FMLCommonHandler;
+import me.exz.omniocular.util.HttpUtil;
 import me.exz.omniocular.util.LogHelper;
 
 public class ScriptEngineHandler {
 
     public static ScriptEngineManager manager;
 
-    private static void downLoadFromUrl(String urlStr, File saveFile) throws IOException {
-        URL url = new URL(urlStr);
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setConnectTimeout(5 * 1000);
-        // 防止屏蔽程序抓取而返回403错误
-        conn.setRequestProperty("User-Agent", "Mozilla/4.0 (compatible; MSIE 5.0; Windows NT; DigExt)");
+    /** 只保留 HTTPS 源：明文 HTTP 可被中间人替换为任意 jar，而这个 jar 会被注入系统类加载器。 */
+    private static final String[] repos = new String[] { "https://repo1.maven.org/maven2/",
+        "https://repo.maven.apache.org/maven2/", "https://mirrors.cloud.tencent.com/repository/maven/",
+        "https://maven.aliyun.com/repository/public/" };
 
-        // 得到输入流
-        InputStream inputStream = conn.getInputStream();
-        byte[] buffer = new byte[2048];
-        int len = 0;
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        while ((len = inputStream.read(buffer)) != -1) {
-            bos.write(buffer, 0, len);
+    private static final String NASHORN_PATH = "org/openjdk/nashorn/nashorn-core/15.4/nashorn-core-15.4.jar";
+
+    /**
+     * nashorn-core-15.4.jar 的 SHA-256，取自 Maven Central 随构件发布的官方校验值
+     * （https://repo1.maven.org/maven2/org/openjdk/nashorn/nashorn-core/15.4/nashorn-core-15.4.jar.sha256）。
+     *
+     * <p>
+     * 之所以必须校验：这个 jar 会被反射注入 <b>AppClassLoader</b>（所有加载器里优先级最高的一层），
+     * 投毒影响的是整个游戏进程，而不是被限制在模组的类加载器内。校验和一致性也覆盖了各大镜像，
+     * 因为它们分发的是同一个构件。
+     */
+    private static final String NASHORN_SHA256 = "6f816e84dfd63a81d4eaa7829c08337bbaff3ec683ff3bf6bbd90d017a00dc6f";
+
+    private static String sha256Hex(byte[] data) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(data);
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(Character.forDigit((b >> 4) & 0xf, 16));
+                sb.append(Character.forDigit(b & 0xf, 16));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 是 JVM 必须实现的算法，走到这里说明 JVM 有问题
+            throw new IllegalStateException("SHA-256 unavailable", e);
         }
-        bos.close();
-
-        byte[] getData = bos.toByteArray();
-
-        // 文件保存位置
-        File saveDir = new File(saveFile.getParent());
-        if (!saveDir.exists()) {
-            saveDir.mkdir();
-        }
-
-        FileOutputStream fos = new FileOutputStream(saveFile);
-        fos.write(getData);
-        fos.close();
-        inputStream.close();
     }
 
-    private static final String[] repos = new String[] { "https://repo1.maven.org/maven2/", "http://maven.aliyun.com/",
-        "https://repo.maven.apache.org/maven2/", "https://mirrors.cloud.tencent.com/repository/maven/",
-        "http://maven.netease.com/repository/public/" };
+    /** 下载 + 校验 + 落盘。任一步失败都抛 IOException，不会留下半成品。 */
+    private static void downloadAndVerify(String urlStr, File saveFile) throws IOException {
+        byte[] data = HttpUtil.downloadBytes(urlStr);
+        String actual = sha256Hex(data);
+        if (!NASHORN_SHA256.equalsIgnoreCase(actual)) {
+            throw new IOException(
+                "SHA-256 mismatch for " + urlStr + ": expected " + NASHORN_SHA256 + " but got " + actual);
+        }
+        File dir = saveFile.getParentFile();
+        if (dir != null && !dir.exists() && !dir.mkdirs()) {
+            throw new IOException("Cannot create directory " + dir);
+        }
+        try (FileOutputStream fos = new FileOutputStream(saveFile)) {
+            fos.write(data);
+        }
+    }
 
     public static void initScriptEngineManager() {
         if (Double.parseDouble(System.getProperty("java.class.version")) >= 55.0) {
@@ -78,27 +93,26 @@ public class ScriptEngineHandler {
                     LogHelper.info("Nashorn core not exist!");
                     LogHelper.info("Downloading...!");
 
-                    String urlPath = "org/openjdk/nashorn/nashorn-core/15.4/nashorn-core-15.4.jar";
-
                     boolean downloadSucceed = false;
                     for (String urlBase : repos) {
-                        String url = urlBase + urlPath;
+                        String url = urlBase + NASHORN_PATH;
                         try {
-                            LogHelper.info("Download From: " + url);
-                            downLoadFromUrl(url, jarFile);
-                            LogHelper.info("Download succeed!");
+                            LogHelper.info("Download and verify from: " + url);
+                            downloadAndVerify(url, jarFile);
+                            LogHelper.info("Download succeed (SHA-256 verified).");
                             downloadSucceed = true;
                             break;
                         } catch (IOException e) {
-                            LogHelper.fatal("Download Failed! " + e.getMessage());
-                            e.printStackTrace();
+                            LogHelper.fatal("Download/verify failed: " + e.getMessage());
                         }
                     }
                     if (!downloadSucceed) {
-                        LogHelper.fatal("Unable to download file: " + jarFile.getPath());
+                        LogHelper.fatal("Unable to download and verify " + jarFile.getPath());
                         LogHelper.fatal(
-                            "You can manually download nashorn-core-15.4.jar it and copy the file to "
-                                + jarFile.getPath());
+                            "Download nashorn-core-15.4.jar manually and place it at " + jarFile.getPath()
+                                + " (SHA-256 must be "
+                                + NASHORN_SHA256
+                                + ")");
                         FMLCommonHandler.instance()
                             .exitJava(-1, false);
                     }

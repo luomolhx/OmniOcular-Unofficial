@@ -17,7 +17,9 @@ import net.minecraft.util.MovingObjectPosition;
 
 import mcp.mobius.waila.api.impl.DataAccessorCommon;
 import me.exz.omniocular.config.Config;
+import me.exz.omniocular.handler.UpstreamConfigHandler;
 import me.exz.omniocular.util.NBTHelper;
+import me.exz.omniocular.util.Stats;
 
 public class CommandLookFor extends CommandBase {
 
@@ -40,6 +42,20 @@ public class CommandLookFor extends CommandBase {
     public void processCommand(ICommandSender sender, String[] array) {
         if (array.length == 1 && array[0].equals("reload")) {
             Config.preprocess();
+            return;
+        }
+        if (array.length == 1 && array[0].equals("update")) {
+            if (UpstreamConfigHandler.isUpdating()) {
+                sender.addChatMessage(new ChatComponentTranslation("omniocular.info.UpdateRunning"));
+                return;
+            }
+            sender.addChatMessage(new ChatComponentTranslation("omniocular.info.UpdateStarted"));
+            // 忽略 GTNH 检测与开关：这是手动触发，开发环境里也得能跑
+            UpstreamConfigHandler.update(true);
+            return;
+        }
+        if (array.length >= 1 && array[0].equals("stats")) {
+            printStats(sender, array);
             return;
         }
         boolean displayNBT = (array.length == 1 && array[0].equals("nbt"));
@@ -109,9 +125,36 @@ public class CommandLookFor extends CommandBase {
         if (args.length == 1) {
             if ("reload".startsWith(args[0])) return Arrays.asList("reload");
             else if ("nbt".startsWith(args[0])) return Arrays.asList("nbt");
+            else if ("stats".startsWith(args[0])) return Arrays.asList("stats");
+            else if ("update".startsWith(args[0])) return Arrays.asList("update");
+        }
+        if (args.length == 2 && args[0].equals("stats") && "reset".startsWith(args[1])) {
+            return Arrays.asList("reset");
         }
 
-        return Arrays.asList("reload", "nbt");
+        return Arrays.asList("reload", "nbt", "stats", "update");
 
+    }
+
+    /**
+     * {@code /oo stats} 与 {@code /oo stats reset}。
+     *
+     * <p>
+     * 统计只有在配置里打开 {@code debug} 后才会计数；未打开时明确提示而不是显示一堆 0，
+     * 否则会让人误以为"性能很好"。
+     */
+    private void printStats(ICommandSender sender, String[] array) {
+        if (array.length == 2 && array[1].equals("reset")) {
+            Stats.reset();
+            sender.addChatMessage(new ChatComponentTranslation("omniocular.info.StatsReset"));
+            return;
+        }
+        if (!Stats.enabled) {
+            sender.addChatMessage(new ChatComponentTranslation("omniocular.info.DebugOff"));
+            return;
+        }
+        for (String line : Stats.reportChatLines()) {
+            sender.addChatMessage(new ChatComponentText(line));
+        }
     }
 }

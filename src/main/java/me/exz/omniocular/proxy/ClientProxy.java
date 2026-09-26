@@ -1,5 +1,8 @@
 package me.exz.omniocular.proxy;
 
+import net.minecraft.client.Minecraft;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.util.ChatComponentTranslation;
 import net.minecraftforge.client.ClientCommandHandler;
 
 import codechicken.nei.guihook.GuiContainerManager;
@@ -44,6 +47,28 @@ public class ClientProxy extends CommonProxy {
         XMLConfigHandler.parseConfigFiles();
         PluginEngine.init();
         Config.preprocess();
+    }
+
+    /** 配置更新的结果回显到聊天栏。调用方在后台线程，故先排进客户端任务队列。 */
+    @Override
+    public void notifyChat(final String translationKey, final Object... args) {
+        final Minecraft minecraft = Minecraft.getMinecraft();
+        if (minecraft == null) {
+            return;
+        }
+        // func_152344_a(Runnable) —— 即 addScheduledTask。GTNH 用的 MCP 集没有映射这两个
+        // 重载（javap 实测只有 func_152343_a/func_152344_a），只能按 SRG 名调用。
+        minecraft.func_152344_a(new Runnable() {
+
+            @Override
+            public void run() {
+                EntityPlayer player = minecraft.thePlayer;
+                // 启动期的自动更新常常早于进入世界：那时没有聊天栏，日志里已有记录
+                if (player != null) {
+                    player.addChatMessage(new ChatComponentTranslation(translationKey, args));
+                }
+            }
+        });
     }
 
 }

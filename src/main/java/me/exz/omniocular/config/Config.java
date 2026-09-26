@@ -12,7 +12,9 @@ import cpw.mods.fml.client.event.ConfigChangedEvent;
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+import me.exz.omniocular.handler.UpstreamConfigHandler;
 import me.exz.omniocular.reference.Reference;
+import me.exz.omniocular.util.Stats;
 
 public class Config {
 
@@ -23,6 +25,16 @@ public class Config {
     public static boolean enableTooltipInfo = true;
     public static boolean forceUseClientXml = false;
     public static boolean sendToClientXML = true;
+
+    /** 打开性能埋点。关闭时埋点开销可忽略（见 Stats 的说明）。 */
+    public static boolean debug = false;
+    /** debug 打开时每隔多少秒向日志输出一次汇总（0 = 只输出到 /oo stats）。 */
+    public static int debugStatsIntervalSeconds = 0;
+
+    /** 检测到 GTNH 整合包时，是否从上游仓库拉取配置并覆盖本地。 */
+    public static boolean gtnhConfigAutoUpdate = true;
+    /** 上游 XML 配置仓库的基地址，文件名直接追加在后面。 */
+    public static String gtnhConfigRepo = UpstreamConfigHandler.DEFAULT_REPO;
 
     private static String[] blackTileEntityNames = new String[0];
     public static String[] scriptClassName = new String[0];
@@ -77,6 +89,35 @@ public class Config {
             forceUseClientXml,
             "Force client-side XML configuration");
 
+        debug = config.getBoolean(
+            "debug",
+            Configuration.CATEGORY_GENERAL,
+            debug,
+            "Enable performance instrumentation. Counters are near-free while false. See /oo stats.");
+        debugStatsIntervalSeconds = config.getInt(
+            "debugStatsIntervalSeconds",
+            Configuration.CATEGORY_GENERAL,
+            debugStatsIntervalSeconds,
+            0,
+            3600,
+            "While debug is on, log a stats summary every N seconds (0 = only via /oo stats).");
+
+        // 同步到埋点层。放在 loadConfig 里，使配置 GUI 改动后即时生效，无需重启。
+        Stats.enabled = debug;
+        Stats.reportIntervalSeconds = debugStatsIntervalSeconds;
+
+        gtnhConfigAutoUpdate = config.getBoolean(
+            "gtnhConfigAutoUpdate",
+            Configuration.CATEGORY_GENERAL,
+            gtnhConfigAutoUpdate,
+            "Detected GTNH modpack: download the latest XML configs from the upstream repo and overwrite the local ones."
+                + " Disable to keep your local configs. See also /oo update.");
+        gtnhConfigRepo = config.getString(
+            "gtnhConfigRepo",
+            Configuration.CATEGORY_GENERAL,
+            gtnhConfigRepo,
+            "Base URL of the upstream XML config repo; the file names are appended to it directly.");
+
         blackTileEntityNames = config.getStringList(
             "blackTileEntityNames",
             Configuration.CATEGORY_GENERAL,
@@ -95,6 +136,9 @@ public class Config {
             new String[] {},
             "The class name of the script written in java. as: me.exz.omniocular.scripts.GTNHScript");
 
+        // 必须先清空：loadConfig 会被配置 GUI 的 ConfigChangedEvent 反复调用，
+        // 原实现只 add 不 clear，导致从配置里删掉的条目要重启才生效。
+        blackEntity.clear();
         blackEntity.addAll(Arrays.asList(blackEntityNames));
 
         if (config.hasChanged()) {
@@ -103,6 +147,8 @@ public class Config {
     }
 
     public static void preprocess() {
+        // 同上：/oo reload 会重跑本方法，只 add 不 clear 的话删除的条目不会生效
+        blackTileEntity.clear();
         for (String blackTileEntityName : blackTileEntityNames) {
             String[] ss = blackTileEntityName.split("@", 2);
             Block block = Block.getBlockFromName(ss[0]);
