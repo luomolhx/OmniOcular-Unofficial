@@ -231,6 +231,43 @@ public class XMLConfigHandler {
     }
 
     /**
+     * 合并后的配置里是否真的带了内容。
+     *
+     * <p>
+     * 专用服务端在 {@code ServerProxy#init} 调 {@link #mergeConfig()} 时配置目录常常还是空的
+     * （{@code releasePreConfigFiles} 只在客户端跑），产出的是 {@code "<root></root>"}。
+     * 这份空配置一旦下发，客户端 {@code XMLConfigMessageHandler.recvConfigString} 的
+     * {@code __END__} 分支会无条件覆盖 {@code mergedConfig} 并 {@code parseConfigFiles()}，
+     * 把客户端本地 XML 规则清空——表现就是"连服务器后 OmniOcular 什么都不显示"。
+     *
+     * <p>
+     * 不能用 {@code entityPattern}/{@code tileEntityPattern} 判断：{@link #parseConfigFiles()}
+     * 只在客户端跑（{@code ClientProxy#postInit}），服务端这几张表恒为空。
+     */
+    public static boolean hasRules() {
+        // 取局部变量：mergedConfig 会被后台配置更新线程写（UpstreamConfigHandler），这里只读一次
+        return hasRules(mergedConfig);
+    }
+
+    /** 判断任意一份合并结果，供网络层检查刚收到的那一份。 */
+    public static boolean hasRules(final String config) {
+        if (config == null || config.isEmpty()) {
+            return false;
+        }
+        final String open = "<root>";
+        final String close = "</root>";
+        final int start = config.indexOf(open);
+        final int end = config.lastIndexOf(close);
+        if (start < 0 || end <= start) {
+            return false;
+        }
+        // 不用 String#isBlank()：本项目 javac 带 --release 8，JDK 11 的 API 不可用
+        return !config.substring(start + open.length(), end)
+            .trim()
+            .isEmpty();
+    }
+
+    /**
      * 转义 &lt;init&gt; / &lt;line&gt; / &lt;setting&gt; 正文中的 XML 特殊字符，使其可作为 XML 文本被解析。
      *
      * <p>

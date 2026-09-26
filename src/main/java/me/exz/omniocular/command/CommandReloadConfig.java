@@ -37,6 +37,11 @@ public class CommandReloadConfig extends CommandBase {
     @Override
     public void processCommand(ICommandSender sender, String[] array) {
         XMLConfigHandler.mergeConfig();
+        // 与 XMLConfigEventHandler 同一个洞：空配置下发会把客户端的本地规则清空
+        if (!XMLConfigHandler.hasRules()) {
+            LogHelper.warn("Merged config is empty; not sending it (it would wipe clients' local rules).");
+            return;
+        }
         List<EntityPlayerMP> playerList = MinecraftServer.getServer()
             .getConfigurationManager().playerEntityList;
         for (EntityPlayerMP player : playerList) {

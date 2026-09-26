@@ -197,6 +197,74 @@ public class XMLConfigHandlerTest {
                 .getLength() > 0);
     }
 
+    /**
+     * 空目录合并出来的 {@code "<root></root>"} 必须被判为"没有规则"。
+     *
+     * <p>
+     * 回归测试：专用服务端不跑 {@code releasePreConfigFiles}（只在 {@code ClientProxy.init} 调），
+     * 配置目录为空时 {@code ServerProxy.init} 的 {@code mergeConfig()} 就产出这个字符串。
+     * 它一旦下发给客户端，客户端的 {@code recvConfigString} 会覆盖本地 {@code mergedConfig}
+     * 并 {@code parseConfigFiles()}，把客户端自己的 XML 规则清空——表现是"连服务器后
+     * OmniOcular 什么都不显示"。{@code hasRules()} 就是这条路径的闸门。
+     */
+    @Test
+    public void hasRulesRejectsEmptyMergedConfig() {
+        assertFalse(XMLConfigHandler.hasRules("<root></root>"));
+    }
+
+    /** 只有空白（或只有注释被拼进来）同样不算规则。 */
+    @Test
+    public void hasRulesRejectsWhitespaceOnlyBody() {
+        assertFalse(XMLConfigHandler.hasRules("<root>   \n\t  </root>"));
+    }
+
+    /** 拿不到语料时必须保守，不能把 null / 空串当成"有规则"放行。 */
+    @Test
+    public void hasRulesRejectsNullOrBlankOrMalformed() {
+        assertFalse(XMLConfigHandler.hasRules((String) null));
+        assertFalse(XMLConfigHandler.hasRules(""));
+        assertFalse("缺 root 包裹", XMLConfigHandler.hasRules("<oo><line>x</line></oo>"));
+        assertFalse("只有开始标签", XMLConfigHandler.hasRules("<root><oo></oo>"));
+        assertFalse("闭合在开始之前", XMLConfigHandler.hasRules("</root><root>"));
+    }
+
+    /** 有真实内容时为 true。 */
+    @Test
+    public void hasRulesAcceptsRealContent() {
+        assertTrue(XMLConfigHandler.hasRules("<root><oo><line>x</line></oo></root>"));
+        assertTrue(XMLConfigHandler.hasRules("<root><oo><setting id=\"s\">1</setting></oo></root>"));
+    }
+
+    /**
+     * 端到端：拿 jar 里自带的那份 XML 按 {@code mergeConfig()} 的方式拼接后必须判为 true。
+     *
+     * <p>
+     * 这是上面几条假阳/假阴在真实文件上的投影——闸门装反了（把正常配置也拦下）会表现为
+     * "服务端不再向客户端下发配置"，比原来的 bug 更隐蔽。
+     */
+    @Test
+    public void hasRulesAcceptsBundledConfigMergedLikeMergeConfig() throws Exception {
+        String content;
+        try (java.io.InputStream in = getClass().getResourceAsStream("/assets/omniocular/config/OmniOcular.xml")) {
+            assertNotNull("打包资源缺失", in);
+            content = new String(readAll(in), java.nio.charset.StandardCharsets.UTF_8);
+        }
+
+        StringBuilder merged = new StringBuilder("<root>");
+        for (String line : content.split("\n", -1)) {
+            merged.append(line.replace("\r", ""));
+        }
+        merged.append("</root>");
+
+        assertTrue(XMLConfigHandler.hasRules(XMLConfigHandler.escapeTagBodies(merged.toString())));
+    }
+
+    /** 无参重载读的是 {@code mergedConfig} 字段，未解析过时是空串，必须为 false。 */
+    @Test
+    public void hasRulesNoArgIsFalseBeforeAnyMerge() {
+        assertFalse(XMLConfigHandler.hasRules());
+    }
+
     private static byte[] readAll(java.io.InputStream in) throws Exception {
         java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
         byte[] buffer = new byte[8192];

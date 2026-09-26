@@ -63,9 +63,16 @@ public class XMLConfigMessageHandler implements IMessageHandler<XMLConfigMessage
                 LogHelper.warn("Received end-of-config without a matching start marker; discarded.");
                 return;
             }
-            XMLConfigHandler.mergedConfig = sb.toString();
+            final String received = sb.toString();
+            // 旧服务端在配置目录为空时会下发 "<root></root>"；接受它等于清空本地规则，
+            // 所以宁可保留客户端自己的配置
+            if (!XMLConfigHandler.hasRules(received)) {
+                LogHelper.warn("Received an empty server config; keeping the local rules.");
+                return;
+            }
+            XMLConfigHandler.mergedConfig = received;
             // 只记长度：整份配置可达数百 KB，原先把全文写进日志会淹没日志文件
-            LogHelper.info("Received server config (" + XMLConfigHandler.mergedConfig.length() + " chars)");
+            LogHelper.info("Received server config (" + received.length() + " chars)");
             XMLConfigHandler.parseConfigFiles();
             return;
         }
