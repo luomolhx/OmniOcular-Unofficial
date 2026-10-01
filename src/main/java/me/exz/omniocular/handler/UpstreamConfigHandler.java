@@ -11,9 +11,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.io.FileUtils;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 
@@ -33,6 +36,11 @@ import me.exz.omniocular.util.LogHelper;
  * 下载、写盘都在后台线程，不阻塞游戏加载。
  *
  * <p>
+ * 仓库地址都在配置里：{@code gtnhConfigRepo} 是主源，{@code gtnhConfigRepoMirrors} 是主源下载失败时
+ * 依次重试的镜像；文件清单默认按源地址推断（能认出的 GitHub 源会推出对应的 jsdelivr 列表接口），
+ * 也可以用 {@code gtnhConfigListingUrl} 显式指定，推不出/请求失败时退回内置清单。
+ *
+ * <p>
  * <b>为什么"停用"要用空 &lt;oo/&gt; 占位而不是删文件</b>：{@link XMLConfigHandler#releasePreConfigFiles}
  * 只在文件不存在时才释放 jar 内置配置，删掉的话下次启动会被塞回来；而内置的 {@code GregTech5U.xml}
  * 与仓库的 {@code GregTech5U-GTNH.xml} 都定义了 {@code id="BaseMetaTileEntity"}，{@code JSEngine.getBody}
@@ -44,11 +52,14 @@ public class UpstreamConfigHandler {
     /** 默认上游仓库（{@code luomolhx/GTNH_OmniOcular} 的 master 分支）。 */
     public static final String DEFAULT_REPO = "https://raw.githubusercontent.com/luomolhx/GTNH_OmniOcular/master/";
 
-    /** 默认仓库的镜像：raw.githubusercontent 在国内常不可达，jsdelivr 一般可以。 */
-    private static final String[] DEFAULT_MIRRORS = { "https://cdn.jsdelivr.net/gh/luomolhx/GTNH_OmniOcular@master/" };
-
-    /** 列出仓库文件的 API。用 jsdelivr 而不是 GitHub API：后者匿名访问按 IP 限流（60 次/小时）。 */
-    private static final String LISTING_URL = "https://data.jsdelivr.com/v1/packages/gh/luomolhx/GTNH_OmniOcular@master?structure=flat";
+    /**
+     * 默认仓库的镜像：raw.githubusercontent 在国内常不可达，jsdelivr 一般可以。
+     *
+     * <p>
+     * 同时是配置项 {@code gtnhConfigRepoMirrors} 的默认值——把 {@code gtnhConfigRepo} 换成别的仓库
+     * （比如自己的 fork）时记得一并改掉，否则主源下载失败会回退到<b>默认仓库</b>的内容。
+     */
+    public static final String[] DEFAULT_MIRRORS = { "https://cdn.jsdelivr.net/gh/luomolhx/GTNH_OmniOcular@master/" };
 
     /**
      * 列表 API 不可达时的内置清单（对应仓库 2026-09 的文件集）。
@@ -61,6 +72,12 @@ public class UpstreamConfigHandler {
 
     /** 单个配置文件的大小上限，超过就不认（所有真实配置都在 100KB 以内）。 */
     private static final int MAX_FILE_BYTES = 2 * 1024 * 1024;
+
+    /** 能推出 jsdelivr 列表接口的两种源地址（尾斜杠已由 {@link #normalizeBaseUrl} 保证）。 */
+    private static final Pattern RAW_GITHUB = Pattern
+        .compile("^https?://raw\\.githubusercontent\\.com/([^/]+)/([^/]+)/(.+)/$");
+    private static final Pattern JSDELIVR_GH = Pattern
+        .compile("^https?://cdn\\.jsdelivr\\.net/gh/([^/]+)/([^/@]+)@(.+)/$");
 
     private static final String XML_EXT = ".xml";
 
@@ -117,15 +134,15 @@ public class UpstreamConfigHandler {
             return;
         }
 
-        String base = normalizeBaseUrl(Config.gtnhConfigRepo);
-        List<String> sources = new ArrayList<>();
-        sources.add(base);
-        if (base.equals(DEFAULT_REPO)) {
-            sources.addAll(Arrays.asList(DEFAULT_MIRRORS));
-        }
-        LogHelper.info("Checking the upstream config repo: " + base);
+        List<String> sources = resolveSources(Config.gtnhConfigRepo, Config.gtnhConfigRepoMirrors);
+        String listingUrl = resolveListingUrl(Config.gtnhConfigListingUrl, sources);
+        LogHelper.info(
+            "Checking the upstream config sources " + sources
+                + " (listing: "
+                + (listingUrl == null ? "built-in file list" : listingUrl)
+                + ")");
 
-        Set<String> repoNames = fetchFileNames(base);
+        Set<String> repoNames = fetchFileNames(listingUrl);
         Map<String, byte[]> contents = new LinkedHashMap<>();
         for (String name : repoNames) {
             byte[] data = fetchFile(sources, name);
@@ -286,13 +303,76 @@ public class UpstreamConfigHandler {
     }
 
     /**
-     * 仓库文件清单。默认仓库优先走列表 API（能自动跟进仓库新增的文件），
-     * 自定义仓库或列表请求失败时退回内置清单。
+     * 下载源列表：主源在最前，其后是配置里的镜像（顺序即重试顺序）。
+     *
+     * <p>
+     * 空条目跳过、重复的去掉：等价地址重试只是白白多等一轮超时。
      */
-    static Set<String> fetchFileNames(String base) {
-        if (base.equals(DEFAULT_REPO)) {
+    static List<String> resolveSources(String primary, String[] mirrors) {
+        Set<String> sources = new LinkedHashSet<>();
+        sources.add(normalizeBaseUrl(primary));
+        if (mirrors != null) {
+            for (String mirror : mirrors) {
+                String trimmed = mirror == null ? "" : mirror.trim();
+                if (!trimmed.isEmpty()) {
+                    sources.add(withTrailingSlash(trimmed));
+                }
+            }
+        }
+        return new ArrayList<>(sources);
+    }
+
+    /**
+     * 文件清单接口地址：显式配置优先；没配就按下载源推断（见 {@link #deriveListingUrl}）。
+     *
+     * @return 接口地址；返回 null 表示列不出清单，调用方退回内置清单
+     */
+    static String resolveListingUrl(String configured, List<String> sources) {
+        String trimmed = configured == null ? "" : configured.trim();
+        if (!trimmed.isEmpty()) {
+            return trimmed;
+        }
+        for (String base : sources) {
+            String derived = deriveListingUrl(base);
+            if (derived != null) {
+                return derived;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 由下载源推出 jsdelivr 的 flat 列表接口（能自动跟进仓库新增的文件）。
+     *
+     * <p>
+     * 用 jsdelivr 而不是 GitHub API：后者匿名访问按 IP 限流（60 次/小时）。认不出的地址
+     * （自建源、Gitee 等）返回 null——那种主源只能吃内置清单，或用 {@code gtnhConfigListingUrl}
+     * 指向自己仓库的列表接口。
+     */
+    static String deriveListingUrl(String base) {
+        Matcher raw = RAW_GITHUB.matcher(base);
+        if (raw.matches()) {
+            return jsdelivrListing(raw.group(1), raw.group(2), raw.group(3));
+        }
+        Matcher cdn = JSDELIVR_GH.matcher(base);
+        if (cdn.matches()) {
+            return jsdelivrListing(cdn.group(1), cdn.group(2), cdn.group(3));
+        }
+        return null;
+    }
+
+    private static String jsdelivrListing(String owner, String repo, String ref) {
+        return "https://data.jsdelivr.com/v1/packages/gh/" + owner + "/" + repo + "@" + ref + "?structure=flat";
+    }
+
+    /**
+     * 仓库文件清单。列表接口能问出结果就用它（能自动跟进仓库新增的文件），
+     * 没配接口、请求失败或解析不出内容时退回内置清单。
+     */
+    static Set<String> fetchFileNames(String listingUrl) {
+        if (listingUrl != null) {
             try {
-                String json = new String(HttpUtil.downloadBytes(LISTING_URL), StandardCharsets.UTF_8);
+                String json = new String(HttpUtil.downloadBytes(listingUrl), StandardCharsets.UTF_8);
                 Set<String> names = parseFileNames(json);
                 if (!names.isEmpty()) {
                     return names;
@@ -305,25 +385,29 @@ public class UpstreamConfigHandler {
         return new LinkedHashSet<>(Arrays.asList(FALLBACK_FILE_NAMES));
     }
 
-    /** 解析 jsdelivr flat 列表 JSON，取仓库根目录下的 {@code .xml} 文件名（不含后缀）。 */
+    /**
+     * 解析仓库的 flat 文件清单，取根目录下的 {@code .xml} 文件名（不含后缀）。
+     *
+     * <p>
+     * 两种响应都认：jsdelivr 的 {@code {"files":[{"name":"/X.xml"}]}}（名字带前导斜杠），
+     * 以及 Gitee API v5 的 contents 列表 {@code [{"name":"X.xml","type":"file"}]}。
+     */
     static Set<String> parseFileNames(String json) {
         Set<String> names = new LinkedHashSet<>();
-        JsonElement root = new JsonParser().parse(json);
-        if (root == null || !root.isJsonObject()) {
+        JsonArray files = listingFiles(new JsonParser().parse(json));
+        if (files == null) {
             return names;
         }
-        JsonElement files = root.getAsJsonObject()
-            .get("files");
-        if (files == null || !files.isJsonArray()) {
-            return names;
-        }
-        for (JsonElement file : files.getAsJsonArray()) {
+        for (JsonElement file : files) {
             if (!file.isJsonObject()) {
                 continue;
             }
             JsonElement nameElement = file.getAsJsonObject()
                 .get("name");
-            if (nameElement == null) {
+            // Gitee 的目录项也带 name（子目录同理，直接跳过）
+            JsonElement typeElement = file.getAsJsonObject()
+                .get("type");
+            if (nameElement == null || (typeElement != null && "dir".equals(typeElement.getAsString()))) {
                 continue;
             }
             String name = nameElement.getAsString();
@@ -336,6 +420,24 @@ public class UpstreamConfigHandler {
             }
         }
         return names;
+    }
+
+    /** 两种列表响应里的文件数组：jsdelivr 是 {@code {"files":[...]}}，Gitee 直接是 {@code [...]}。 */
+    private static JsonArray listingFiles(JsonElement root) {
+        if (root == null) {
+            return null;
+        }
+        if (root.isJsonArray()) {
+            return root.getAsJsonArray();
+        }
+        if (root.isJsonObject()) {
+            JsonElement files = root.getAsJsonObject()
+                .get("files");
+            if (files != null && files.isJsonArray()) {
+                return files.getAsJsonArray();
+            }
+        }
+        return null;
     }
 
     /**
@@ -427,10 +529,11 @@ public class UpstreamConfigHandler {
     /** 统一成以 {@code /} 结尾，便于直接拼接文件名；空值退回默认仓库。 */
     static String normalizeBaseUrl(String url) {
         String trimmed = url == null ? "" : url.trim();
-        if (trimmed.isEmpty()) {
-            return DEFAULT_REPO;
-        }
-        return trimmed.endsWith("/") ? trimmed : trimmed + "/";
+        return trimmed.isEmpty() ? DEFAULT_REPO : withTrailingSlash(trimmed);
+    }
+
+    private static String withTrailingSlash(String url) {
+        return url.endsWith("/") ? url : url + "/";
     }
 
     private static boolean contentEquals(File file, byte[] data) {

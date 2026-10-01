@@ -35,6 +35,10 @@ public class Config {
     public static boolean gtnhConfigAutoUpdate = true;
     /** 上游 XML 配置仓库的基地址，文件名直接追加在后面。 */
     public static String gtnhConfigRepo = UpstreamConfigHandler.DEFAULT_REPO;
+    /** 主源下载失败时依次重试的镜像基地址；默认是默认仓库自己的镜像。 */
+    public static String[] gtnhConfigRepoMirrors = UpstreamConfigHandler.DEFAULT_MIRRORS;
+    /** 列出仓库文件的接口；留空则按下载源推断，推不出就用内置清单。 */
+    public static String gtnhConfigListingUrl = "";
 
     private static String[] blackTileEntityNames = new String[0];
     public static String[] scriptClassName = new String[0];
@@ -117,6 +121,20 @@ public class Config {
             Configuration.CATEGORY_GENERAL,
             gtnhConfigRepo,
             "Base URL of the upstream XML config repo; the file names are appended to it directly.");
+        gtnhConfigRepoMirrors = config.getStringList(
+            "gtnhConfigRepoMirrors",
+            Configuration.CATEGORY_GENERAL,
+            gtnhConfigRepoMirrors,
+            "Mirror base URLs, tried in this order when a file cannot be downloaded from gtnhConfigRepo."
+                + " Defaults to the mirrors of the default repo, so change them if you point gtnhConfigRepo at"
+                + " another repo (e.g. a fork), or a failed download will fall back to the default repo's content.");
+        gtnhConfigListingUrl = config.getString(
+            "gtnhConfigListingUrl",
+            Configuration.CATEGORY_GENERAL,
+            gtnhConfigListingUrl,
+            "URL returning the repo's JSON file listing (jsdelivr flat listing or Gitee API v5 contents)."
+                + " Leave empty to derive it from the source URLs - works for raw.githubusercontent.com and"
+                + " cdn.jsdelivr.net bases. If it cannot be derived, a built-in file list is used.");
 
         blackTileEntityNames = config.getStringList(
             "blackTileEntityNames",

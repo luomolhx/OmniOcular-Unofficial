@@ -11,12 +11,20 @@ import java.net.URL;
  *
  * <p>
  * 原先这段逻辑内嵌在 {@code ScriptEngineHandler} 里，配置更新器需要同一套超时/状态码处理，
- * 故提取出来共用（只搬不改：超时值、UA、非 200 抛错的行为都保持一致）。
+ * 故提取出来共用（超时值、非 200 抛错的行为保持一致）。
  */
 public class HttpUtil {
 
-    /** 防止屏蔽程序抓取而返回 403 错误。 */
-    private static final String USER_AGENT = "Mozilla/4.0 (compatible; MSIE 5.0; Windows NT; DigExt)";
+    /**
+     * 伪装成普通浏览器，挡住按 UA 拦人的站点。
+     *
+     * <p>
+     * 原来那串 IE 5.0 的 UA 会被 Gitee 的 WAF 直接 403（raw 与 API 都拦），配置更新指向
+     * Gitee 镜像时一个文件都下不下来；现代浏览器 UA 在 Gitee、jsdelivr、Maven Central
+     * 上都实测可用。
+     */
+    private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        + " (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
     /**
      * GET 一个 URL 并返回全部内容。

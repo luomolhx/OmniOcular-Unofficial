@@ -4,6 +4,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
@@ -11,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -59,6 +61,70 @@ public class UpstreamConfigHandlerTest {
         assertTrue(
             UpstreamConfigHandler.parseFileNames("[\"not\", \"an\", \"object\"]")
                 .isEmpty());
+    }
+
+    /** Gitee API v5 的 contents 列表：数组根、名字不带前导斜杠、目录项要跳过。 */
+    @Test
+    public void parsesGiteeContentsListing() {
+        String json = "[\n" + "  {\"type\": \"file\", \"name\": \"AWWayofTime.xml\", \"path\": \"AWWayofTime.xml\"},\n"
+            + "  {\"type\": \"file\", \"name\": \"README.md\", \"path\": \"README.md\"},\n"
+            + "  {\"type\": \"dir\", \"name\": \"GTNH.xml\", \"path\": \"GTNH.xml\"},\n"
+            + "  {\"type\": \"file\", \"name\": \"minecraft.xml\", \"path\": \"minecraft.xml\"}\n"
+            + "]";
+        assertEquals(
+            new LinkedHashSet<>(Arrays.asList("AWWayofTime", "minecraft")),
+            UpstreamConfigHandler.parseFileNames(json));
+    }
+
+    @Test
+    public void resolveSourcesKeepsPrimaryFirstAndSkipsEmptyMirrors() {
+        assertEquals(
+            Arrays.asList("https://a/", "https://b/"),
+            UpstreamConfigHandler.resolveSources("https://a", new String[] { " https://b ", "", "   ", "https://a" }));
+        // 没配镜像时只剩主源（空主源仍退回默认仓库）
+        assertEquals(
+            Arrays.asList(UpstreamConfigHandler.DEFAULT_REPO),
+            UpstreamConfigHandler.resolveSources("", new String[0]));
+        assertEquals(
+            Arrays.asList(UpstreamConfigHandler.DEFAULT_REPO),
+            UpstreamConfigHandler.resolveSources(null, null));
+    }
+
+    @Test
+    public void derivesListingUrlFromGithubSources() {
+        // 默认仓库推出的必须仍是原来那个写死的地址（行为不变）
+        assertEquals(
+            "https://data.jsdelivr.com/v1/packages/gh/luomolhx/GTNH_OmniOcular@master?structure=flat",
+            UpstreamConfigHandler.deriveListingUrl(UpstreamConfigHandler.DEFAULT_REPO));
+        // fork 与 jsdelivr 源同理
+        assertEquals(
+            "https://data.jsdelivr.com/v1/packages/gh/someone/Fork@main?structure=flat",
+            UpstreamConfigHandler.deriveListingUrl("https://raw.githubusercontent.com/someone/Fork/main/"));
+        assertEquals(
+            "https://data.jsdelivr.com/v1/packages/gh/someone/Fork@main?structure=flat",
+            UpstreamConfigHandler.deriveListingUrl("https://cdn.jsdelivr.net/gh/someone/Fork@main/"));
+        // 认不出的源（Gitee / 自建）列不出清单
+        assertNull(UpstreamConfigHandler.deriveListingUrl("https://gitee.com/luomolhx/GTNH_OmniOcular/raw/master/"));
+        assertNull(UpstreamConfigHandler.deriveListingUrl("https://example.com/configs/"));
+    }
+
+    @Test
+    public void resolveListingUrlPrefersConfiguredAndFallsBackToNull() {
+        List<String> defaultSources = UpstreamConfigHandler.resolveSources("", UpstreamConfigHandler.DEFAULT_MIRRORS);
+        // 显式配置优先
+        assertEquals(
+            "https://gitee.com/api/v5/repos/luomolhx/GTNH_OmniOcular/contents/",
+            UpstreamConfigHandler.resolveListingUrl(
+                " https://gitee.com/api/v5/repos/luomolhx/GTNH_OmniOcular/contents/ ",
+                defaultSources));
+        // 没配就从源地址推
+        assertEquals(
+            UpstreamConfigHandler.deriveListingUrl(UpstreamConfigHandler.DEFAULT_REPO),
+            UpstreamConfigHandler.resolveListingUrl("", defaultSources));
+        // 推不出（Gitee 主源）就是 null，调用方退回内置清单
+        assertNull(
+            UpstreamConfigHandler
+                .resolveListingUrl(null, UpstreamConfigHandler.resolveSources("https://gitee.com/x/y/raw/m/", null)));
     }
 
     @Test
