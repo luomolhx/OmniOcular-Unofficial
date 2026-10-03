@@ -6,7 +6,7 @@
         "version": "${modVersion}",
         "mcversion": "${minecraftVersion}",
         "logoFile": "",
-        "url": "http://github.com/wohaopa/OmniOcular-Unofficial",
+        "url": "https://github.com/luomolhx/OmniOcular-Unofficial",
         "updateUrl": "",
         "authorList": ["Epix"],
         "credits": "",

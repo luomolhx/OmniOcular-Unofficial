@@ -26,7 +26,7 @@
 
 ### 1.1 与上游的关系
 
-- 目录名与 `mcmod.info` 的 `url` 指向 `wohaopa/OmniOcular-Unofficial`
+- 上游是 `wohaopa/OmniOcular-Unofficial`；本 fork 的 `mcmod.info` `url` 已改为 `luomolhx/OmniOcular-Unofficial`
 - 包名仍为原始作者的 `me.exz.omniocular`，`modId` 为 `OmniOcularUnofficial`，但 `Reference.OLD_MOD_ID` 保留 `OmniOcular` 用于配置文件目录兼容
 - `mcmod.info` 的 `authorList` 只写了 `Epix`，未反映 GTNH 分支的改动
 - 缺少 `LICENSE` 归属说明与上游差异说明（`LICENSE` 存在但未在 README 中引用）
