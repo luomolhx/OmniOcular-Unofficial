@@ -93,6 +93,18 @@ public class UpstreamConfigHandler {
 
     /** 起后台线程执行更新；本方法立即返回。{@code force} 为真时忽略开关与 GTNH 检测。 */
     public static void update(final boolean force) {
+        update(force, null);
+    }
+
+    /**
+     * 带完成回调的版本：{@code onComplete} 在更新流程结束后（含失败）于<b>后台线程</b>回调，
+     * 供服务端把"改完的配置推给在线玩家"这件事调度回服务端线程（见 {@code /oor update}）。
+     *
+     * <p>
+     * 已有更新在跑时本方法直接返回且<b>不触发回调</b>——调用方要先问 {@link #isUpdating()}，
+     * 否则会误以为回调一定会到。
+     */
+    public static void update(final boolean force, final Runnable onComplete) {
         if (!running.compareAndSet(false, true)) {
             LogHelper.info("An upstream config update is already running; request ignored.");
             return;
@@ -109,6 +121,14 @@ public class UpstreamConfigHandler {
                     e.printStackTrace();
                 } finally {
                     running.set(false);
+                    if (onComplete != null) {
+                        try {
+                            onComplete.run();
+                        } catch (Throwable e) {
+                            LogHelper.error("Upstream config update callback failed: " + e);
+                            e.printStackTrace();
+                        }
+                    }
                 }
             }
         }, "OmniOcular-Config-Updater");

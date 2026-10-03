@@ -1,6 +1,9 @@
 package me.exz.omniocular.network;
 
+import java.util.List;
+
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.server.MinecraftServer;
 
 import cpw.mods.fml.common.network.NetworkRegistry;
 import cpw.mods.fml.common.network.simpleimpl.IMessage;
@@ -38,6 +41,31 @@ public class XMLConfigMessageHandler implements IMessageHandler<XMLConfigMessage
             sendString(string, player);
         }
         sendString("__END__", player);
+    }
+
+    /**
+     * 重新合并本地配置并推给所有在线玩家。空配置不推——客户端收到会清空本地规则
+     * （见 {@link #recvConfigString} 的 {@code __END__} 分支）。
+     *
+     * <p>
+     * <b>必须在服务端线程调用</b>：{@code playerEntityList} 会随玩家登录/登出并发变化。
+     *
+     * @return 收到配置的玩家数；因合并结果为空而未推送时返回 -1
+     */
+    public static int pushMergedConfigToAllPlayers() {
+        XMLConfigHandler.mergeConfig();
+        if (!XMLConfigHandler.hasRules()) {
+            LogHelper.warn("Merged config is empty; not sending it (it would wipe clients' local rules).");
+            return -1;
+        }
+        String config = XMLConfigHandler.mergedConfig;
+        int sent = 0;
+        for (EntityPlayerMP player : (List<EntityPlayerMP>) MinecraftServer.getServer()
+            .getConfigurationManager().playerEntityList) {
+            sendConfigString(config, player);
+            sent++;
+        }
+        return sent;
     }
 
     /** 累计接收上限，防止异常或恶意的服务端用无限分片撑爆客户端内存。 */

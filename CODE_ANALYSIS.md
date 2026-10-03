@@ -124,7 +124,7 @@ FMLPostInitialization
     └─ Config.preprocess()                        黑名单 → int 集合
 
 FMLServerStarting（双端）
-  CommandReloadConfig 注册 /oor
+  CommandReloadConfig 注册 /oor（子命令 update：拉上游 + 下发）
 ```
 
 **关键点：服务端从不调用 `parseConfigFiles()`。** 服务端只做 `mergeConfig()`（拼接原始文本）并通过网络发出；所有脚本求值与显示逻辑都在客户端。这是有意的设计，也让服务端可以零成本地为一个不需要显示任何东西的服务器提供配置。
@@ -619,5 +619,6 @@ public static void preprocess() {                       // :105
 | `/oo nbt` | 客户端 | 玩家 | 额外输出目标 NBT 的格式化 JSON |
 | `/oo reload` | 客户端 | 玩家 | 仅重跑 `Config.preprocess()`，**重新加载黑名单，不重解析 XML** |
 | `/oor` | 服务端 | 等级 3 或单人 | `mergeConfig()` 后向全部在线玩家重新下发配置 |
+| `/oor update` | 服务端 | 等级 3 或单人 | 强制从上游仓库拉取配置并覆盖本地，完成后重新 merge 并下发给在线玩家（见 CONFIG_UPDATE_FLOW.md） |
 
-注意 `/oo reload` 只刷新黑名单，不重新读取 XML 文件——XML 的重新加载只能靠 `/oor`（服务端下发）或重启客户端。
+注意 `/oo reload` 只刷新黑名单，不重新读取 XML 文件——XML 的重新加载只能靠 `/oor`（服务端下发）、`/oor update`（服务端拉取后下发）或重启客户端。

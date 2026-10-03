@@ -9,6 +9,7 @@
 | --- | --- | --- | --- |
 | 模组 init（客户端与服务端都跑） | `CommonProxy#init` | `false` | 是 |
 | `/oo update`（客户端命令） | `CommandLookFor#processCommand` | `true` | 否（开发环境也能手动跑） |
+| `/oor update`（服务端命令） | `CommandReloadConfig#processCommand` | `true` | 否（同上；完成后把新配置推给在线玩家） |
 
 ## 一、更新主流程
 
@@ -16,6 +17,7 @@
 flowchart TD
     A1["CommonProxy.init（客户端与服务端）<br/>UpstreamConfigHandler.update(false)"]
     A2["客户端 /oo update<br/>UpstreamConfigHandler.update(true)"]
+    A3["服务端 /oor update<br/>UpstreamConfigHandler.update(true, 完成回调)"]
     L{"单飞锁 running<br/>已有更新在跑？"}
     F1{"force == false ?"}
     F2{"Config.gtnhConfigAutoUpdate ?"}
@@ -24,6 +26,7 @@ flowchart TD
 
     A1 --> L
     A2 --> L
+    A3 --> L
     L -- 是 --> L1["日志：忽略本次请求"] --> Z([结束])
     L -- 否 --> TH["起守护线程 OmniOcular-Config-Updater<br/>updateNow(force)，不阻塞游戏加载"]
     TH --> F1
@@ -101,7 +104,11 @@ flowchart TD
     R2 -- "否（专用服务端）" --> R4
     R3 --> R5
     R4 --> R5
-    R5 --> Z
+    R5 --> CB{"由 /oor update 触发？"}
+    CB -- 否 --> Z
+    CB -- 是 --> CB1["完成后回调：XMLConfigEventHandler.requestPush()<br/>（后台线程只置位，不发包）"]
+    CB1 --> CB2["服务端 tick：pushMergedConfigToAllPlayers()<br/>mergeConfig() → 分片下发 mergedConfig 给所有在线玩家"]
+    CB2 --> Z
 ```
 
 ## 二、占位文件为什么是空 `<oo/>` 而不是删文件
@@ -148,6 +155,11 @@ flowchart TD
 | `/oo update` | 客户端 | 强制跑一次上游更新（忽略开关与 GTNH 检测），已在跑则聊天栏提示 |
 | `/oo reload` | 客户端 | 只跑 `Config.preprocess()`（重算黑名单方块），不重新合并/下载 |
 | `/oor` | 服务端（权限 3） | `mergeConfig()` 后把新配置下发给所有在线玩家；空配置同样拦下不发 |
+| `/oor update` | 服务端（权限 3） | 强制跑一次上游更新；完成后由服务端 tick 重新 merge 并推给在线玩家。更新失败时内容未变，等于空刷一遍配置 |
+
+`/oor update` 解决的是"服务器配置更新了、在线玩家手里还是旧规则"：更新在后台线程跑
+（不能阻塞服务端），推送必须回到服务端线程（`playerEntityList` 不线程安全），
+所以用 `requestPush()` 置位、tick 里做。
 
 客户端的 `forceUseClientXml` 打开后完全不用服务端下发的配置；`sendToClientXML` 是服务端侧的开关。
 
